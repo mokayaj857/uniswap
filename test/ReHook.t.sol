@@ -37,7 +37,7 @@ contract ReHookTest is BaseTest {
 
         // Deploy the hook to an address with the correct flags
         address flags = address(
-            uint160(Hooks.AFTER_SWAP_FLAG) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
+            uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
         );
         bytes memory constructorArgs = abi.encode(poolManager); // Add all the necessary constructor arguments from the hook
         deployCodeTo("ReHook.sol:ReHook", constructorArgs, flags);
