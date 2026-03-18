@@ -29,8 +29,8 @@ contract ConfigureHook is Script {
         vm.startBroadcast();
 
         // Step 1: Get reToken addresses
-        address reToken0 = hook.reTokenMap(TOKEN0);
-        address reToken1 = hook.reTokenMap(TOKEN1);
+        address reToken0 = address(hook.getReToken(TOKEN0));
+        address reToken1 = address(hook.getReToken(TOKEN1));
         
         console.log("");
         console.log("reToken0:", reToken0);
@@ -56,33 +56,35 @@ contract ConfigureHook is Script {
             }
         }
 
-        // Step 3: Fund reward pools
+        // Step 3: Fund reward pools with ETH
         console.log("");
         console.log("Funding reward pools with", INITIAL_REWARD_FUNDING / 1e18, "ETH each...");
         
+        // For ETH rewards, we need to handle this differently since ETH is not an ERC20
+        // This assumes the tokens are ERC20s. For ETH pools, you'd need different logic.
         if (reToken0 != address(0)) {
-            hook.fundRewardPool{value: INITIAL_REWARD_FUNDING}(TOKEN0);
-            console.log("Funded reward pool for reToken0");
+            // This would work for ERC20 tokens, not ETH
+            // For ETH, you'd need to wrap ETH or use a different approach
+            console.log("Note: fundRewardPool expects ERC20 tokens, not ETH");
+            console.log("For ETH rewards, consider using WETH or implement ETH handling");
         }
         
         if (reToken1 != address(0)) {
-            hook.fundRewardPool{value: INITIAL_REWARD_FUNDING}(TOKEN1);
-            console.log("Funded reward pool for reToken1");
+            console.log("Note: fundRewardPool expects ERC20 tokens, not ETH");
+            console.log("For ETH rewards, consider using WETH or implement ETH handling");
         }
 
         // Step 4: Enable advanced features
         console.log("");
         console.log("Enabling advanced features...");
         
-        // Enable fee collection (you'll need to set this per poolId)
-        // Note: You need to pass the actual PoolId from 02_InitializePool output
-        // hook.setFeeCollectionEnabled(poolId, true);
-        // hook.setFeePercentage(poolId, FEE_PERCENTAGE);
-        console.log("Note: Fee collection needs to be enabled per pool using setFeeCollectionEnabled()");
+        // Enable fee collection (global setting)
+        hook.setFeeCollectionEnabled(true);
+        console.log("Fee collection enabled globally");
         
-        // Enable volume tracking (you'll need to set this per poolId)
-        // hook.setVolumeTrackingEnabled(poolId, true);
-        console.log("Note: Volume tracking needs to be enabled per pool using setVolumeTrackingEnabled()");
+        // Enable volume tracking (global setting)
+        hook.setVolumeTrackingEnabled(true);
+        console.log("Volume tracking enabled globally");
         
         // Enable multipliers for staking
         if (reToken0 != address(0)) {

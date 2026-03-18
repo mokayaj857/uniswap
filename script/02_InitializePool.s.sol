@@ -51,7 +51,7 @@ contract InitializePool is Script {
 
         // Calculate pool ID
         PoolId poolId = poolKey.toId();
-        console.log("Pool ID:", PoolId.unwrap(poolId));
+        console.log("Pool ID:", uint256(PoolId.unwrap(poolId)));
 
         // Initialize at 1:1 price (sqrtPriceX96 = sqrt(1) * 2^96)
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0);
@@ -64,7 +64,7 @@ contract InitializePool is Script {
 
         console.log("");
         console.log("=== POOL INITIALIZED SUCCESSFULLY ===");
-        console.log("Pool ID:", PoolId.unwrap(poolId));
+        console.log("Pool ID:", uint256(PoolId.unwrap(poolId)));
         console.log("");
         console.log("Next steps:");
         console.log("1. Create staking pool: hook.createStakingPool(token0)");

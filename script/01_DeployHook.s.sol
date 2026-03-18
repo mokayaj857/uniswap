@@ -53,8 +53,6 @@ contract DeployReHook is Script {
         console.log("=== DEPLOYMENT SUCCESSFUL ===");
         console.log("PoolManager:", POOL_MANAGER);
         console.log("ReHook deployed at:", address(hook));
-        console.log("ReToken address:", address(hook.reToken()));
-        console.log("ReStaking address:", address(hook.reStaking()));
         console.log("FeeCollector address:", address(hook.feeCollector()));
         console.log("VolumeTracker address:", address(hook.volumeTracker()));
         console.log("");
