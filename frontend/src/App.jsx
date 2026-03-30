@@ -59,13 +59,20 @@ const ERC20_ABI = [
 ];
 
 const REHOOK_ABI = [
+  'function owner() view returns (address)',
   'function getReToken(address currency) view returns (address)',
   'function getReStaking(address currency) view returns (address)',
   'function getUserVolume(address user) view returns (uint256 volume, uint8 tier, uint256 lastUpdate)',
   'function getUserMultiplier(address user) view returns (uint256)',
   'function getAccumulatedFees(address token) view returns (uint256)',
   'function getVolumeTracker() view returns (address)',
-  'function getFeeCollector() view returns (address)'
+  'function getFeeCollector() view returns (address)',
+  'function createStakingPool(address currency, uint256 rewardPerSecond) returns (address)',
+  'function fundRewardPool(address currency, uint256 amount)',
+  'function setFeePercentage(uint256 percentage)',
+  'function setFeeCollectionEnabled(bool enabled)',
+  'function setVolumeTrackingEnabled(bool enabled)',
+  'function setStakingMultiplierEnabled(address currency, bool enabled)'
 ];
 
 const RESTAKING_ABI = [
@@ -127,6 +134,14 @@ function App() {
   const [reToken0BalanceRaw, setReToken0BalanceRaw] = useState(0n);
   const [stakedAmountRaw, setStakedAmountRaw] = useState(0n);
   const [pendingRewardsRaw, setPendingRewardsRaw] = useState(0n);
+  const [hookOwner, setHookOwner] = useState('');
+  const [isOwner, setIsOwner] = useState(false);
+  const [createRewardRate, setCreateRewardRate] = useState('');
+  const [fundAmount, setFundAmount] = useState('');
+  const [newFeeBp, setNewFeeBp] = useState('');
+  const [feeEnabledInput, setFeeEnabledInput] = useState(true);
+  const [volumeEnabledInput, setVolumeEnabledInput] = useState(true);
+  const [multiplierEnabledInput, setMultiplierEnabledInput] = useState(true);
   
   const [userData, setUserData] = useState({
     token0Balance: 0,
@@ -183,16 +198,19 @@ function App() {
         token1.balanceOf(address)
       ]);
 
-      const [fee0, reToken0, reToken1, staking0, _staking1] = await Promise.all([
+      const [fee0, reToken0, reToken1, staking0, _staking1, ownerAddr] = await Promise.all([
         hook.getAccumulatedFees(CONFIG.token0Address),
         hook.getReToken(CONFIG.token0Address),
         hook.getReToken(CONFIG.token1Address),
         hook.getReStaking(CONFIG.token0Address),
-        hook.getReStaking(CONFIG.token1Address)
+        hook.getReStaking(CONFIG.token1Address),
+        hook.owner()
       ]);
 
       setReToken0Address(reToken0);
       setStaking0Address(staking0);
+      setHookOwner(ownerAddr);
+      setIsOwner(ownerAddr.toLowerCase() === address.toLowerCase());
 
       let reToken0Bal = 0n;
       let reToken1Bal = 0n;
@@ -429,6 +447,102 @@ function App() {
     }
   };
 
+  const handleCreateStakingPool = async () => {
+    setError('');
+    if (!signer || !isOwner || !HAS_CONFIG) return;
+    if (!createRewardRate || Number(createRewardRate) <= 0) {
+      setError('Enter a valid reward/sec amount.');
+      return;
+    }
+    setTxLoading(true);
+    try {
+      const hook = new Contract(CONFIG.hookAddress, REHOOK_ABI, signer);
+      const rate = parseUnits(createRewardRate, token0Decimals);
+      const tx = await hook.createStakingPool(CONFIG.token0Address, rate);
+      await tx.wait();
+      setCreateRewardRate('');
+      await loadUserData();
+    } catch (e) {
+      console.error(e);
+      setError(e?.shortMessage || e?.message || 'Create staking pool failed.');
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
+  const handleFundRewardPool = async () => {
+    setError('');
+    if (!signer || !isOwner || !HAS_CONFIG) return;
+    if (!fundAmount || Number(fundAmount) <= 0) {
+      setError('Enter a valid funding amount.');
+      return;
+    }
+    setTxLoading(true);
+    try {
+      const hook = new Contract(CONFIG.hookAddress, REHOOK_ABI, signer);
+      const token0 = new Contract(CONFIG.token0Address, ERC20_ABI, signer);
+      const amount = parseUnits(fundAmount, token0Decimals);
+      const allowance = await token0.allowance(address, CONFIG.hookAddress);
+      if (allowance < amount) {
+        const approveTx = await token0.approve(CONFIG.hookAddress, MaxUint256);
+        await approveTx.wait();
+      }
+      const tx = await hook.fundRewardPool(CONFIG.token0Address, amount);
+      await tx.wait();
+      setFundAmount('');
+      await loadUserData();
+    } catch (e) {
+      console.error(e);
+      setError(e?.shortMessage || e?.message || 'Fund reward pool failed.');
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
+  const handleSetFeeBp = async () => {
+    setError('');
+    if (!signer || !isOwner || !HAS_CONFIG) return;
+    const v = Number(newFeeBp);
+    if (!Number.isFinite(v) || v < 0 || v > 100) {
+      setError('Fee basis points must be between 0 and 100 (max 1%).');
+      return;
+    }
+    setTxLoading(true);
+    try {
+      const hook = new Contract(CONFIG.hookAddress, REHOOK_ABI, signer);
+      const tx = await hook.setFeePercentage(v);
+      await tx.wait();
+      setNewFeeBp('');
+      await loadUserData();
+    } catch (e) {
+      console.error(e);
+      setError(e?.shortMessage || e?.message || 'Set fee failed.');
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
+  const handleSetFeatureToggles = async () => {
+    setError('');
+    if (!signer || !isOwner || !HAS_CONFIG) return;
+    setTxLoading(true);
+    try {
+      const hook = new Contract(CONFIG.hookAddress, REHOOK_ABI, signer);
+      const tx1 = await hook.setFeeCollectionEnabled(feeEnabledInput);
+      await tx1.wait();
+      const tx2 = await hook.setVolumeTrackingEnabled(volumeEnabledInput);
+      await tx2.wait();
+      const tx3 = await hook.setStakingMultiplierEnabled(CONFIG.token0Address, multiplierEnabledInput);
+      await tx3.wait();
+      await loadUserData();
+    } catch (e) {
+      console.error(e);
+      setError(e?.shortMessage || e?.message || 'Updating toggles failed.');
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
   return (
     <div className="app">
       <div className="animated-bg">
@@ -559,6 +673,13 @@ function App() {
           >
             <TrendingUp size={20} />
             Stake
+          </button>
+          <button
+            className={`tab ${activeTab === 'owner' ? 'active' : ''}`}
+            onClick={() => setActiveTab('owner')}
+          >
+            <Award size={20} />
+            Owner
           </button>
         </div>
 
@@ -732,6 +853,127 @@ function App() {
                   <p><strong>APY:</strong> ~45% (variable)</p>
                   <p><strong>Multiplier:</strong> {userData.multiplier.toFixed(2)}x ({TIER_NAMES[userData.tier]})</p>
                   <p><strong>Total Fees Collected:</strong> {userData.feesCollected.toFixed(4)} TKNA</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'owner' && (
+            <motion.div
+              key="owner"
+              className="tab-content"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+            >
+              <div className="stake-card glass-card">
+                <h2>Owner Controls</h2>
+                <p className="subtitle">
+                  Hook owner: {hookOwner || 'Unknown'} {isOwner ? '(connected owner)' : '(read only)'}
+                </p>
+
+                <div className="input-group">
+                  <label>Create Staking Pool reward/sec (token0)</label>
+                  <div className="token-input">
+                    <input
+                      type="number"
+                      value={createRewardRate}
+                      onChange={(e) => setCreateRewardRate(e.target.value)}
+                      placeholder="0.0"
+                    />
+                    <div className="token-badge">
+                      <span>rate</span>
+                    </div>
+                  </div>
+                  <motion.button
+                    className="primary-btn"
+                    onClick={handleCreateStakingPool}
+                    disabled={!isOwner || !HAS_CONFIG || txLoading}
+                  >
+                    Create Staking Pool
+                  </motion.button>
+                </div>
+
+                <div className="input-group">
+                  <label>Fund Reward Pool (token0 amount)</label>
+                  <div className="token-input">
+                    <input
+                      type="number"
+                      value={fundAmount}
+                      onChange={(e) => setFundAmount(e.target.value)}
+                      placeholder="0.0"
+                    />
+                    <div className="token-badge">
+                      <span>fund</span>
+                    </div>
+                  </div>
+                  <motion.button
+                    className="primary-btn"
+                    onClick={handleFundRewardPool}
+                    disabled={!isOwner || !HAS_CONFIG || txLoading}
+                  >
+                    Fund Reward Pool
+                  </motion.button>
+                </div>
+
+                <div className="input-group">
+                  <label>Set Fee Basis Points (0 - 100)</label>
+                  <div className="token-input">
+                    <input
+                      type="number"
+                      value={newFeeBp}
+                      onChange={(e) => setNewFeeBp(e.target.value)}
+                      placeholder="10"
+                    />
+                    <div className="token-badge">
+                      <span>bp</span>
+                    </div>
+                  </div>
+                  <motion.button
+                    className="primary-btn"
+                    onClick={handleSetFeeBp}
+                    disabled={!isOwner || !HAS_CONFIG || txLoading}
+                  >
+                    Set Fee
+                  </motion.button>
+                </div>
+
+                <div className="info-box">
+                  <p><strong>Feature Toggles</strong></p>
+                  <p>
+                    Fee collection:&nbsp;
+                    <input
+                      type="checkbox"
+                      checked={feeEnabledInput}
+                      onChange={(e) => setFeeEnabledInput(e.target.checked)}
+                      disabled={!isOwner || txLoading}
+                    />
+                  </p>
+                  <p>
+                    Volume tracking:&nbsp;
+                    <input
+                      type="checkbox"
+                      checked={volumeEnabledInput}
+                      onChange={(e) => setVolumeEnabledInput(e.target.checked)}
+                      disabled={!isOwner || txLoading}
+                    />
+                  </p>
+                  <p>
+                    Staking multiplier:&nbsp;
+                    <input
+                      type="checkbox"
+                      checked={multiplierEnabledInput}
+                      onChange={(e) => setMultiplierEnabledInput(e.target.checked)}
+                      disabled={!isOwner || txLoading}
+                    />
+                  </p>
+                  <motion.button
+                    className="primary-btn"
+                    onClick={handleSetFeatureToggles}
+                    disabled={!isOwner || !HAS_CONFIG || txLoading}
+                  >
+                    Apply Toggles
+                  </motion.button>
                 </div>
               </div>
             </motion.div>
