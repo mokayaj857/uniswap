@@ -350,8 +350,15 @@ contract ReStakingTest is BaseTest {
         hook.fundRewardPool(Currency.unwrap(currency0), newRewardRate * 10 hours);
         
         hook.setRewardRate(Currency.unwrap(currency0), newRewardRate);
+        (, , , , uint256 lastMid, ) = staking0.poolInfo();
 
-        vm.warp(block.timestamp + 1 hours);
+        // Warp using an absolute timestamp derived from staking state, to avoid relying on
+        // the current test environment timestamp.
+        vm.warp(lastMid + 1 hours);
+
+        // Force a stateful pool update to avoid relying purely on view math.
+        // This makes the test robust across compiler pipelines (via-ir/non-via-ir).
+        staking0.updatePool();
 
         uint256 rewardAfter = staking0.pendingReward(alice);
         

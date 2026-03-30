@@ -161,14 +161,14 @@ contract AdvancedFeaturesTest is BaseTest {
             deadline: block.timestamp + 1
         });
 
-        // Volume is tracked for swap router (sender in the hook context)
-        (uint256 volume, , ) = volumeTracker.getUserVolume(address(swapRouter));
+        // Volume is tracked for `tx.origin` (where reTokens are minted)
+        (uint256 volume, , ) = volumeTracker.getUserVolume(tx.origin);
         assertGt(volume, 0); // Should have volume tracked from setup + this swap
     }
 
     function testTierUpgrade() public {
         // Get initial volume
-        (uint256 volumeBefore, uint8 tierBefore, ) = volumeTracker.getUserVolume(address(swapRouter));
+        (uint256 volumeBefore, uint8 tierBefore, ) = volumeTracker.getUserVolume(tx.origin);
         
         // Do more swaps to upgrade tier
         vm.startPrank(alice);
@@ -185,7 +185,7 @@ contract AdvancedFeaturesTest is BaseTest {
         }
         vm.stopPrank();
 
-        (uint256 volumeAfter, uint8 tierAfter, ) = volumeTracker.getUserVolume(address(swapRouter));
+        (uint256 volumeAfter, uint8 tierAfter, ) = volumeTracker.getUserVolume(tx.origin);
         assertGt(volumeAfter, volumeBefore);
         assertGe(tierAfter, tierBefore); // Tier should be same or upgraded
     }
@@ -280,6 +280,8 @@ contract AdvancedFeaturesTest is BaseTest {
     function testVolumeTrackingCanBeToggled() public {
         uint256 swapAmount = 10e18;
 
+        (uint256 volumeBefore, , ) = volumeTracker.getUserVolume(tx.origin);
+
         // Disable volume tracking
         hook.setVolumeTrackingEnabled(false);
 
@@ -294,8 +296,8 @@ contract AdvancedFeaturesTest is BaseTest {
             deadline: block.timestamp + 1
         });
 
-        (uint256 volume, , ) = volumeTracker.getUserVolume(alice);
-        assertEq(volume, 0); // No volume tracked
+        (uint256 volumeAfter, , ) = volumeTracker.getUserVolume(tx.origin);
+        assertEq(volumeAfter, volumeBefore, "Volume should not change while tracking is disabled");
     }
 
     function testVolumeDecay() public {
@@ -309,10 +311,11 @@ contract AdvancedFeaturesTest is BaseTest {
             poolKey: poolKey,
             hookData: Constants.ZERO_BYTES,
             receiver: alice,
-            deadline: block.timestamp + 1
+            // Give ample time buffer so test doesn't flake on deadline checks.
+            deadline: type(uint256).max
         });
 
-        (uint256 volumeBefore, , ) = volumeTracker.getUserVolume(alice);
+        (uint256 volumeBefore, , ) = volumeTracker.getUserVolume(tx.origin);
 
         // Fast forward 30 days (one decay period)
         vm.warp(block.timestamp + 30 days);
@@ -326,10 +329,10 @@ contract AdvancedFeaturesTest is BaseTest {
             poolKey: poolKey,
             hookData: Constants.ZERO_BYTES,
             receiver: alice,
-            deadline: block.timestamp + 1
+            deadline: type(uint256).max
         });
 
-        (uint256 volumeAfter, , ) = volumeTracker.getUserVolume(alice);
+        (uint256 volumeAfter, , ) = volumeTracker.getUserVolume(tx.origin);
 
         // Volume should have decayed
         assertLt(volumeAfter, volumeBefore + 1 ether);
@@ -337,7 +340,7 @@ contract AdvancedFeaturesTest is BaseTest {
 
     function testMultipleTierUpgrades() public {
         // Get router's initial tier
-        (, uint8 initialTier, ) = volumeTracker.getUserVolume(address(swapRouter));
+        (, uint8 initialTier, ) = volumeTracker.getUserVolume(tx.origin);
 
         // Do many swaps to increase volume
         vm.startPrank(alice);
@@ -354,13 +357,13 @@ contract AdvancedFeaturesTest is BaseTest {
         }
         vm.stopPrank();
         
-        (, uint8 finalTier, ) = volumeTracker.getUserVolume(address(swapRouter));
+        (, uint8 finalTier, ) = volumeTracker.getUserVolume(tx.origin);
         assertGe(finalTier, initialTier); // Tier should upgrade or stay same
     }
 
     function testGetUserMultiplier() public {
         // Test that multiplier function works
-        uint256 routerMultiplier = volumeTracker.getMultiplier(address(swapRouter));
+        uint256 routerMultiplier = volumeTracker.getMultiplier(tx.origin);
         assertGt(routerMultiplier, 0); // Should have some multiplier (at least 1.0x = 10000)
     }
 

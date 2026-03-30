@@ -207,9 +207,8 @@ contract ComprehensiveIntegrationTest is BaseTest {
         // Step 5: Verify Alice's volume is tracked for tier progression
         console.log("\nStep 3: Verify volume tracking for tier progression");
         
-        // Note: Volume is tracked for swapRouter (the sender in hook context)
-        // But we can still verify the tracking system works
-        (uint256 volume, uint8 tier, uint256 lastUpdate) = volumeTracker.getUserVolume(address(swapRouter));
+        // Volume is tracked for `tx.origin` (where reTokens are minted)
+        (uint256 volume, uint8 tier, uint256 lastUpdate) = volumeTracker.getUserVolume(tx.origin);
         
         console.log("  Swap router volume:", volume);
         console.log("  Swap router tier:", tier);
@@ -237,7 +236,7 @@ contract ComprehensiveIntegrationTest is BaseTest {
         }
         vm.stopPrank();
         
-        (uint256 volumeAfter, uint8 tierAfter, ) = volumeTracker.getUserVolume(address(swapRouter));
+        (uint256 volumeAfter, uint8 tierAfter, ) = volumeTracker.getUserVolume(tx.origin);
         console.log("  Volume after additional swaps:", volumeAfter);
         console.log("  Tier after additional swaps:", tierAfter);
         console.log("  [PASS] Tier progression system is working");

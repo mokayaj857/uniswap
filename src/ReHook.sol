@@ -69,7 +69,9 @@ contract ReHook is BaseHook, Ownable {
         SwapParams calldata params,
         bytes calldata
     ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
-        address user = sender; // Use sender for tracking instead of tx.origin
+        // Track volume for the external initiator (EOA). This matches where `_afterSwap`
+        // mints reTokens (`tx.origin`).
+        address user = tx.origin;
         
         // Calculate swap amount for volume tracking and fee collection
         uint256 swapAmount = params.amountSpecified < 0 
@@ -160,6 +162,9 @@ contract ReHook is BaseHook, Ownable {
         );
         
         reStaking[currency] = stakingPool;
+
+        // Wire the global volume tracker so that enabling multipliers works immediately.
+        stakingPool.setVolumeTracker(address(volumeTracker));
         
         return stakingPool;
     }

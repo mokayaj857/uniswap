@@ -12,29 +12,32 @@ import {ReHook} from "../src/ReHook.sol";
 /// @dev Mines for an address with BEFORE_SWAP_FLAG and AFTER_SWAP_FLAG enabled
 contract DeployReHook is Script {
     // CREATE2 Deployer address (same across most EVM chains)
-    address constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
-    
-    // Unichain Sepolia PoolManager
-    // For other networks, update this address from: https://docs.uniswap.org/contracts/v4/deployments
-    address constant POOL_MANAGER = 0x00B036B58a818B1BC34d502D3fE730Db729e62AC;
+    // Override with `CREATE2_DEPLOYER` env var if your chain differs.
+    address constant DEFAULT_CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
     function run() public {
+        address poolManager = vm.envAddress("POOL_MANAGER");
+        address create2Deployer = vm.envOr("CREATE2_DEPLOYER", DEFAULT_CREATE2_DEPLOYER);
+
         // Our hook needs both BEFORE_SWAP_FLAG and AFTER_SWAP_FLAG
         // beforeSwap: for fee capture and volume tracking
         // afterSwap: for reToken minting
         uint160 flags = uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG);
 
+        console.log("ChainId:", block.chainid);
         console.log("Mining for hook address with flags:", flags);
         console.log("BEFORE_SWAP_FLAG:", uint160(Hooks.BEFORE_SWAP_FLAG));
         console.log("AFTER_SWAP_FLAG:", uint160(Hooks.AFTER_SWAP_FLAG));
+        console.log("POOL_MANAGER:", poolManager);
+        console.log("CREATE2_DEPLOYER:", create2Deployer);
 
         // Constructor arguments for ReHook
-        bytes memory constructorArgs = abi.encode(IPoolManager(POOL_MANAGER));
+        bytes memory constructorArgs = abi.encode(IPoolManager(poolManager));
 
         // Mine for a salt that gives us the right address
         console.log("Starting address mining (this may take a minute)...");
         (address hookAddress, bytes32 salt) = HookMiner.find(
-            CREATE2_DEPLOYER,
+            create2Deployer,
             flags,
             type(ReHook).creationCode,
             constructorArgs
@@ -47,11 +50,11 @@ contract DeployReHook is Script {
         // Deploy the hook using CREATE2 with the found salt
         vm.startBroadcast();
         
-        ReHook hook = new ReHook{salt: salt}(IPoolManager(POOL_MANAGER));
+        ReHook hook = new ReHook{salt: salt}(IPoolManager(poolManager));
         
         console.log("");
         console.log("=== DEPLOYMENT SUCCESSFUL ===");
-        console.log("PoolManager:", POOL_MANAGER);
+        console.log("PoolManager:", poolManager);
         console.log("ReHook deployed at:", address(hook));
         console.log("FeeCollector address:", address(hook.feeCollector()));
         console.log("VolumeTracker address:", address(hook.volumeTracker()));

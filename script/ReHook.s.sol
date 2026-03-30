@@ -12,7 +12,10 @@ import {ReHook} from "../src/ReHook.sol";
 contract Deploy is BaseScript {
     function run() public {
         // hook contracts must have specific flags encoded in the address
-        uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
+        // This hook relies on both callbacks:
+        // - `beforeSwap` (fee collection + volume tracking)
+        // - `afterSwap` (reToken minting)
+        uint160 flags = uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG);
 
         bytes memory constructorArgs = abi.encode(poolManager);
 
